@@ -1,14 +1,17 @@
-Living Plan: CISA-Conformant SBOM GitHub Action
+# Living Plan: CISA-Conformant SBOM GitHub Action
+
 This document serves as an actionable, test-driven specification for building a composite GitHub Action derived from the architecture of vln-devsecops/actions-sca-syft-grype. The new action automates the generation, enrichment, attestation, and distribution of CISA-conformant Software Bill of Materials (SBOM) documents.
-1. System Architecture & Specification
+
+# System Architecture & Specification
 The action encapsulates five sequential operational phases:
 [ Input Resolution ] ──> [ Syft Generation ] ──> [ CISA Metadata Injection ] ──> [ Attestation ] ──> [ Opt-In Distribution ]
    (release-please)       (CycloneDX JSON)             (jq Post-Processor)         (GitHub Attest)     (GHCR / GHR / Packages)
 
-Action Interface (action.yml)
+## 1. Action Interface (action.yml)
+
  * Inputs:
    * target: Target directory, container image, or archive to scan (default: .).
-   * source-name: Name of the component or software product (required).
+   * source-name: Name of the component or software product (defaults to repository name).
    * source-version: Explicit version string. If omitted, triggers release-please auto-resolution.
    * release-please-file: Path to .release-please-manifest.json for version resolution (default: .release-please-manifest.json).
    * author: Author/Creator of the SBOM (default: ${{ github.repository_owner }}).
@@ -24,9 +27,14 @@ Action Interface (action.yml)
    * sbom-path: Absolute path to the generated CISA-compliant sbom.json.
    * resolved-version: Final version string applied to the SBOM metadata.
    * attestation-digest: Cryptographic digest of the signed attestation bundle (if enabled).
-2. BDD Specifications (Gherkin Feature Files)
-Place these feature files in tests/features/ to drive implementation validation.
-Feature 1: CISA-Compliant Metadata Injection
+ 
+## 2. BDD Specifications (Gherkin Feature Files)
+
+Place these feature files in features/ to drive implementation validation.
+
+### Feature 1: CISA-Compliant Metadata Injection
+
+```gherkin
 Feature: CISA-Compliant Metadata Enrichment
   As a DevSecOps Engineer
   I want Syft SBOM outputs enriched with CISA minimum required fields
@@ -47,8 +55,11 @@ Feature: CISA-Compliant Metadata Enrichment
     And the JSON array “.metadata.authors” contains an entry with name “DevSecOps Team”
     And the JSON property “.metadata.supplier.name” equals “Acme Corp”
     And the JSON array “.metadata.properties” contains a property “cisa:generationContext” with value “post-build”
+```
 
-Feature 2: Release-Please Version Resolution
+### Feature 2: Release-Please Version Resolution
+
+```gherkin
 Feature: Automatic Version Extraction via Release-Please
   As a Release Manager
   I want the action to automatically infer component versions from release-please manifests
@@ -79,8 +90,11 @@ Feature: Automatic Version Extraction via Release-Please
       | input          | value  |
       | source-version | 3.0.0  |
     Then the action output “resolved-version” should equal “3.0.0”
+```
 
-Feature 3: Attestation & Opt-In Package Distribution
+### Feature 3: Attestation & Opt-In Package Distribution
+
+```gherkin
 Feature: Attestation and Multi-Target Package Distribution
   As a Security Auditor
   I want optional attestation and package-embedding capabilities
@@ -107,9 +121,13 @@ Feature: Attestation and Multi-Target Package Distribution
       | package-type      | maven                       |
       | package-file-path | build/libs/service-1.0.0.jar|
     Then the file “META-INF/sbom/application-sbom.json” exists inside “build/libs/service-1.0.0.jar”
+```
 
-3. TDD Strategy & Implementation Plan
-Test Suite Structure
+## 3. TDD Strategy & Implementation Plan
+
+### Test Suite Structure
+
+```
 .
 ├── .github/
 │   └── workflows/
@@ -128,9 +146,12 @@ Test Suite Structure
     └── fixtures/
         ├── sample-syft-output.json
         └── .release-please-manifest.json
+```
 
-Component Test Cases (Using BATS - Bash Automated Testing System)
-Unit Test 1: Version Resolution Logic (tests/unit/resolve-version.test.bats)
+### Component Test Cases (Using BATS - Bash Automated Testing System)
+
+#### Unit Test 1: Version Resolution Logic (tests/unit/resolve-version.test.bats)
+```bash
 #!/usr/bin/env bats
 
 setup() {
@@ -154,8 +175,11 @@ setup() {
   [ “$status” -eq 0 ]
   [[ “$output” =~ ^[0-9]+\.[0-9]+\.[0-9]+.* ]]
 }
+```
 
-Unit Test 2: CISA JSON Enrichment (tests/unit/enrich-cisa.test.bats)
+#### Unit Test 2: CISA JSON Enrichment (tests/unit/enrich-cisa.test.bats)
+
+```bash
 #!/usr/bin/env bats
 
 setup() {
@@ -188,9 +212,13 @@ teardown() {
   run jq -r ‘.metadata.properties[] | select(.name==“cisa:generationContext”).value’ “$OUTPUT_FILE”
   [ “$output” = “post-build” ]
 }
+```
 
-4. Implementation Details
-Step 1: scripts/resolve-version.sh
+## 4. Implementation Details
+
+### Step 1: scripts/resolve-version.sh
+
+```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -214,8 +242,11 @@ fi
 
 # Fallback to git tag/hash descriptor
 git describe —tags —always 2>/dev/null || echo “0.0.0-draft”
+```
 
-Step 2: scripts/enrich-cisa.sh
+### Step 2: scripts/enrich-cisa.sh
+
+```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -253,8 +284,11 @@ jq \
   (if $supplier != “” then .metadata.supplier = {“name”: $supplier} else . end) |
   .metadata.properties = ( (.metadata.properties // []) + [{“name”: “cisa:generationContext”, “value”: $context}] | unique_by(.name) )
   ‘ “$INPUT_FILE” > “$OUTPUT_FILE”
+```
+  
+### Step 3: scripts/attach-package.sh
 
-Step 3: scripts/attach-package.sh
+```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -297,8 +331,11 @@ case “$PACKAGE_TYPE” in
     exit 1
     ;;
 esac
+```
 
-Step 4: action.yml Implementation
+### Step 4: action.yml Implementation
+
+```yaml
 name: ‘CISA-Conformant Syft SBOM & Attestation Generator’
 description: ‘Generates enriched CISA-compliant SBOMs, provides GitHub Attestations, and attaches to packages.’
 inputs:
@@ -431,18 +468,27 @@ runs:
           “${{ inputs.package-type }}” \
           “${{ inputs.package-file-path }}” \
           “sbom.json”
+``` 
 
-5. End-User Integration Runbook
+## 5. End-User Integration Runbook
+
 This section details setup recipes for development teams integrating this action into their repositories.
-Prerequisites & Permissions
+
+### Prerequisites & Permissions
+
 Your workflow job must contain the following GitHub permissions to generate attestations and push assets to registries:
+
+```yaml
 permissions:
   contents: write        # Required for GitHub Release upload
   packages: write        # Required for GHCR push
   id-token: write        # Required for GitHub Sigstore Artifact Attestation
   attestations: write    # Required for GitHub Artifact Attestation write
+```
 
-Scenario A: Standalone CISA SBOM with Automated release-please
+### Scenario A: Standalone CISA SBOM with Automated release-please
+
+```yaml
 name: Security & Release Pipelines
 
 on:
@@ -474,8 +520,11 @@ jobs:
           supplier: ‘Acme Software Enterprise’
           generation-context: ‘post-build’
           attest: ‘true’
+```
 
-Scenario B: Container Build with GHCR Attestation & OCI Attachment
+### Scenario B: Container Build with GHCR Attestation & OCI Attachment
+
+```yaml
 jobs:
   build-container:
     runs-on: ubuntu-latest
@@ -510,8 +559,11 @@ jobs:
           source-version: ‘1.2.0’
           attach-ghcr: ‘true’
           attest: ‘true’
+```
 
-Scenario C: Embedded Language Package (Java / Maven JAR Distribution)
+### Scenario C: Embedded Language Package (Java / Maven JAR Distribution)
+
+```yaml
 jobs:
   package-java:
     runs-on: ubuntu-latest
@@ -536,4 +588,4 @@ jobs:
 
       - name: Publish Artifact
         run: ./gradlew publish
-
+```
