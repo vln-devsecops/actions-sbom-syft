@@ -33,7 +33,12 @@ case "$TARGET" in
 	# untagged, registry-qualified image reference (e.g. "ghcr.io/org/app").
 	# Follow Docker's own heuristic for telling these apart: if the first
 	# path segment looks like a registry host (contains a "." or equals
-	# "localhost"), treat the whole thing as an image reference.
+	# "localhost"), treat the whole thing as an image reference. This is
+	# an inherent ambiguity in the heuristic itself, not fully resolvable
+	# from syntax alone: a genuine local path whose first segment happens
+	# to contain a dot (e.g. "my.local.cache/missing-file") will be
+	# skipped here and only surface as a syft error later, not from this
+	# script.
 	first_segment="${TARGET%%/*}"
 	case "$first_segment" in
 	*.* | localhost) exit 0 ;;
