@@ -1,0 +1,164 @@
+name: "CISA-Conformant Syft SBOM & Attestation Generator"
+description: "Generates enriched CISA-compliant SBOMs, provides GitHub Attestations, and attaches to packages."
+
+inputs:
+  target:
+    description: "Target directory, container image, or archive to scan"
+    required: false
+    default: "."
+  source-name:
+    description: "Component/Product name"
+    required: true
+  source-version:
+    description: "Explicit version (overrides release-please)"
+    required: false
+    default: ""
+  release-please-file:
+    description: "Path to release-please manifest file"
+    required: false
+    default: ".release-please-manifest.json"
+  author:
+    description: "SBOM Author name"
+    required: false
+    default: "${{ github.repository_owner }}"
+  supplier:
+    description: "Organization supplier name"
+    required: false
+    default: ""
+  generation-context:
+    description: "CISA Lifecycle context (build, post-build, pre-build, source)"
+    required: false
+    default: "post-build"
+  attest:
+    description: "Sign and create a GitHub Artifact Attestation"
+    required: false
+    default: "true"
+  attach-ghcr:
+    description: "Push SBOM to GHCR via cosign (requires target to be an image reference and cosign to already be installed on PATH)"
+    required: false
+    default: "false"
+  attach-release:
+    description: "Upload SBOM asset to a GitHub Release"
+    required: false
+    default: "false"
+  release-tag:
+    description: "Target release tag for upload (required if attach-release is 'true')"
+    required: false
+    default: ""
+  package-type:
+    description: "Archive type to inject the SBOM into: none, npm, maven, nuget"
+    required: false
+    default: "none"
+  package-file-path:
+    description: "Path to local archive artifact file (required if package-type is not 'none')"
+    required: false
+    default: ""
+
+outputs:
+  sbom-path:
+    description: "Absolute path to the enriched CISA sbom.json"
+    value: ${{ steps.cisa-enrich.outputs.sbom-path }}
+  resolved-version:
+    description: "Final version string applied to the SBOM metadata"
+    value: ${{ steps.version.outputs.version }}
+  attestation-digest:
+    description: "SHA-256 digest of the SBOM subject that was attested (empty if attest is 'false')"
+    value: ${{ steps.attestation-digest.outputs.digest }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate Target
+      shell: bash
+      run: |
+        "${{ github.action_path }}/scripts/validate-target.sh" "${{ inputs.target }}"
+
+    - name: Resolve Application Version
+      id: version
+      shell: bash
+      run: |
+        VER=$("${{ github.action_path }}/scripts/resolve-version.sh" \
+          "${{ inputs.source-version }}" \
+          "${{ inputs.release-please-file }}" \
+          "${{ inputs.target }}")
+        echo "version=${VER}" >> "$GITHUB_OUTPUT"
+
+    - name: Install Syft
+      shell: bash
+      env:
+        SYFT_VERSION: v1.54.0
+      run: |
+        set -euo pipefail
+        bin_dir="${{ github.action_path }}/.bin"
+        mkdir -p "$bin_dir"
+        curl -sSfL "https://raw.githubusercontent.com/anchore/syft/${SYFT_VERSION}/install.sh" \
+          | sh -s -- -b "$bin_dir" "$SYFT_VERSION"
+        echo "$bin_dir" >> "$GITHUB_PATH"
+
+    - name: Generate Base CycloneDX SBOM
+      shell: bash
+      env:
+        SYFT_FILE_METADATA_SELECTION: all
+      run: |
+        syft "${{ inputs.target }}" -o cyclonedx-json=raw-sbom.json
+
+    - name: Enrich Metadata for CISA Compliance
+      id: cisa-enrich
+      shell: bash
+      run: |
+        set -euo pipefail
+        "${{ github.action_path }}/scripts/enrich-cisa.sh" \
+          --input raw-sbom.json \
+          --output sbom.json \
+          --name "${{ inputs.source-name }}" \
+          --version "${{ steps.version.outputs.version }}" \
+          --author "${{ inputs.author }}" \
+          --supplier "${{ inputs.supplier }}" \
+          --context "${{ inputs.generation-context }}"
+        echo "sbom-path=$(pwd)/sbom.json" >> "$GITHUB_OUTPUT"
+
+    - name: Attest SBOM (GitHub Sigstore Attestation)
+      if: inputs.attest == 'true'
+      uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+      with:
+        subject-path: ${{ steps.cisa-enrich.outputs.sbom-path }}
+        sbom-path: ${{ steps.cisa-enrich.outputs.sbom-path }}
+
+    - name: Compute Attestation Digest
+      id: attestation-digest
+      if: inputs.attest == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest=$(sha256sum "${{ steps.cisa-enrich.outputs.sbom-path }}" | cut -d' ' -f1)
+        echo "digest=sha256:${digest}" >> "$GITHUB_OUTPUT"
+
+    - name: Attach to OCI Image in GHCR
+      if: inputs.attach-ghcr == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        cosign attach sbom --sbom "${{ steps.cisa-enrich.outputs.sbom-path }}" "${{ inputs.target }}"
+
+    - name: Attach to GitHub Release
+      if: inputs.attach-release == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ inputs.release-tag }}
+      run: |
+        set -euo pipefail
+        if [ -z "$RELEASE_TAG" ]; then
+          echo "Error: release-tag is required when attach-release is 'true'." >&2
+          exit 1
+        fi
+        gh release upload "$RELEASE_TAG" "${{ steps.cisa-enrich.outputs.sbom-path }}#cisa-sbom.json" --clobber
+
+    - name: Embed SBOM in Package Payload
+      if: inputs.package-type != 'none'
+      shell: bash
+      run: |
+        "${{ github.action_path }}/scripts/attach-package.sh" \
+          "${{ inputs.package-type }}" \
+          "${{ inputs.package-file-path }}" \
+          "${{ steps.cisa-enrich.outputs.sbom-path }}"
