@@ -16,16 +16,27 @@ case "$TARGET" in
 esac
 
 case "$TARGET" in
+*:*)
+	# Contains a colon anywhere: either a bare "name:tag"/"name@digest"-style
+	# image reference (e.g. "alpine:latest") or a tagged, registry-qualified
+	# one (e.g. "ghcr.io/org/app:v1.0.0"). Either way, not a filesystem path.
+	exit 0
+	;;
+esac
+
+case "$TARGET" in
 . | ./* | ../* | /*)
 	# Unambiguous filesystem path.
 	;;
 */*)
-	# Ambiguous: could be "subdir/path" or "registry.example.com/repo:tag".
-	# Treat it as an image reference if the last path segment contains a colon
-	# (the image tag/digest separator), otherwise as a filesystem path.
-	last_segment="${TARGET##*/}"
-	case "$last_segment" in
-	*:*) exit 0 ;;
+	# Ambiguous multi-segment path with no colon: could be "dir/subdir" or an
+	# untagged, registry-qualified image reference (e.g. "ghcr.io/org/app").
+	# Follow Docker's own heuristic for telling these apart: if the first
+	# path segment looks like a registry host (contains a "." or equals
+	# "localhost"), treat the whole thing as an image reference.
+	first_segment="${TARGET%%/*}"
+	case "$first_segment" in
+	*.* | localhost) exit 0 ;;
 	esac
 	;;
 esac

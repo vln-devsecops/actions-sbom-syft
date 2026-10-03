@@ -53,3 +53,24 @@ teardown() {
   run "$SCRIPT" "registry:index.docker.io/library/alpine:latest"
   [ "$status" -eq 0 ]
 }
+
+@test "validate-target: does not validate a bare image reference with a tag and no slash" {
+  run "$SCRIPT" "alpine:latest"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate-target: does not validate an untagged, registry-qualified image reference" {
+  run "$SCRIPT" "ghcr.io/my-org/my-app"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate-target: does not validate a localhost-registry image reference" {
+  run "$SCRIPT" "localhost/my-org/my-app"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate-target: rejects a non-existent multi-segment local path whose first segment has no dot" {
+  run "$SCRIPT" "dist/my-package-1.0.0.tgz"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"target path does not exist"* ]]
+}

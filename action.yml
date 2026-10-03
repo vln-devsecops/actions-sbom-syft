@@ -70,22 +70,33 @@ runs:
   steps:
     - name: Validate Target
       shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
       run: |
-        "${{ github.action_path }}/scripts/validate-target.sh" "${{ inputs.target }}"
+        "${{ github.action_path }}/scripts/validate-target.sh" "$TARGET"
 
     - name: Resolve Application Version
       id: version
       shell: bash
+      env:
+        SOURCE_VERSION: ${{ inputs.source-version }}
+        RELEASE_PLEASE_FILE: ${{ inputs.release-please-file }}
+        TARGET: ${{ inputs.target }}
       run: |
         VER=$("${{ github.action_path }}/scripts/resolve-version.sh" \
-          "${{ inputs.source-version }}" \
-          "${{ inputs.release-please-file }}" \
-          "${{ inputs.target }}")
+          "$SOURCE_VERSION" \
+          "$RELEASE_PLEASE_FILE" \
+          "$TARGET")
         echo "version=${VER}" >> "$GITHUB_OUTPUT"
 
     - name: Install Syft
       shell: bash
       env:
+        # Pinned to a release tag rather than "main" to avoid a floating
+        # version. Note tags are weaker than a commit SHA pin (mutable
+        # until the upstream repo protects them); accepted here since
+        # anchore/syft's install.sh has no documented per-tag checksum to
+        # verify against.
         SYFT_VERSION: v1.54.0
       run: |
         set -euo pipefail
@@ -99,22 +110,29 @@ runs:
       shell: bash
       env:
         SYFT_FILE_METADATA_SELECTION: all
+        TARGET: ${{ inputs.target }}
       run: |
-        syft "${{ inputs.target }}" -o cyclonedx-json=raw-sbom.json
+        syft "$TARGET" -o cyclonedx-json=raw-sbom.json
 
     - name: Enrich Metadata for CISA Compliance
       id: cisa-enrich
       shell: bash
+      env:
+        SOURCE_NAME: ${{ inputs.source-name }}
+        RESOLVED_VERSION: ${{ steps.version.outputs.version }}
+        AUTHOR: ${{ inputs.author }}
+        SUPPLIER: ${{ inputs.supplier }}
+        GENERATION_CONTEXT: ${{ inputs.generation-context }}
       run: |
         set -euo pipefail
         "${{ github.action_path }}/scripts/enrich-cisa.sh" \
           --input raw-sbom.json \
           --output sbom.json \
-          --name "${{ inputs.source-name }}" \
-          --version "${{ steps.version.outputs.version }}" \
-          --author "${{ inputs.author }}" \
-          --supplier "${{ inputs.supplier }}" \
-          --context "${{ inputs.generation-context }}"
+          --name "$SOURCE_NAME" \
+          --version "$RESOLVED_VERSION" \
+          --author "$AUTHOR" \
+          --supplier "$SUPPLIER" \
+          --context "$GENERATION_CONTEXT"
         echo "sbom-path=$(pwd)/sbom.json" >> "$GITHUB_OUTPUT"
 
     - name: Attest SBOM (GitHub Sigstore Attestation)
@@ -128,17 +146,22 @@ runs:
       id: attestation-digest
       if: inputs.attest == 'true'
       shell: bash
+      env:
+        SBOM_PATH: ${{ steps.cisa-enrich.outputs.sbom-path }}
       run: |
         set -euo pipefail
-        digest=$(sha256sum "${{ steps.cisa-enrich.outputs.sbom-path }}" | cut -d' ' -f1)
+        digest=$(sha256sum "$SBOM_PATH" | cut -d' ' -f1)
         echo "digest=sha256:${digest}" >> "$GITHUB_OUTPUT"
 
     - name: Attach to OCI Image in GHCR
       if: inputs.attach-ghcr == 'true'
       shell: bash
+      env:
+        SBOM_PATH: ${{ steps.cisa-enrich.outputs.sbom-path }}
+        TARGET: ${{ inputs.target }}
       run: |
         set -euo pipefail
-        cosign attach sbom --sbom "${{ steps.cisa-enrich.outputs.sbom-path }}" "${{ inputs.target }}"
+        cosign attach sbom --sbom "$SBOM_PATH" "$TARGET"
 
     - name: Attach to GitHub Release
       if: inputs.attach-release == 'true'
@@ -146,19 +169,24 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         RELEASE_TAG: ${{ inputs.release-tag }}
+        SBOM_PATH: ${{ steps.cisa-enrich.outputs.sbom-path }}
       run: |
         set -euo pipefail
         if [ -z "$RELEASE_TAG" ]; then
           echo "Error: release-tag is required when attach-release is 'true'." >&2
           exit 1
         fi
-        gh release upload "$RELEASE_TAG" "${{ steps.cisa-enrich.outputs.sbom-path }}#cisa-sbom.json" --clobber
+        gh release upload "$RELEASE_TAG" "${SBOM_PATH}#cisa-sbom.json" --clobber
 
     - name: Embed SBOM in Package Payload
       if: inputs.package-type != 'none'
       shell: bash
+      env:
+        PACKAGE_TYPE: ${{ inputs.package-type }}
+        PACKAGE_FILE_PATH: ${{ inputs.package-file-path }}
+        SBOM_PATH: ${{ steps.cisa-enrich.outputs.sbom-path }}
       run: |
         "${{ github.action_path }}/scripts/attach-package.sh" \
-          "${{ inputs.package-type }}" \
-          "${{ inputs.package-file-path }}" \
-          "${{ steps.cisa-enrich.outputs.sbom-path }}"
+          "$PACKAGE_TYPE" \
+          "$PACKAGE_FILE_PATH" \
+          "$SBOM_PATH"
