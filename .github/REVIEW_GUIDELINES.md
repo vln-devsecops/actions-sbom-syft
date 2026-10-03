@@ -26,15 +26,14 @@ PR has no SCA surface), say so explicitly rather than omitting it.
    - No secrets, tokens, or credentials hard-coded or logged.
 
 2. **SCA (software composition / supply chain)**
-   - All third-party GitHub Actions (`uses:`) must be pinned to a full
-     commit SHA (not a mutable tag like `@v3`), with a trailing comment
-     noting the human-readable version. Don't just check the comment is
-     present — verify the SHA actually resolves to the claimed tag/release
-     (e.g. via the GitHub UI or `git ls-remote --tags`); a mismatched
-     comment is itself a known supply-chain attack vector.
-   - Any pinned tool version (Syft, cosign, bats-core, etc.) must be a real,
-     resolvable release; flag anything pinned to `latest`/`main`/a floating
-     major tag.
+   - All third-party GitHub Actions (`uses:`) must be pinned to a specific
+     version tag (e.g. `@v4.1.2`), not a floating major tag (`@v4`, `@v3`)
+     and not `@main`/`@latest`. Verify the tag is a real, resolvable release
+     of that action (e.g. via the GitHub UI or `git ls-remote --tags`), not
+     a typo or a tag that doesn't exist.
+   - Any pinned tool version (Syft, cosign, bats-core, etc.) must likewise
+     be a real, resolvable release; flag anything pinned to `latest`/`main`/
+     a floating major tag.
    - New dependencies (vendored scripts, submodules, npm/pip packages) must
      be justified — flag unnecessary or unmaintained dependencies.
 
