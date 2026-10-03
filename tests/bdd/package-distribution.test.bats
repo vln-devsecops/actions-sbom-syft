@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
 # Acceptance tests for features/package-distribution.feature,
-# the two scenarios implemented by scripts/attach-package.sh so far:
-# Maven JAR embedding and npm tarball embedding. The attestation and
-# GHCR/release distribution scenarios in that feature are implemented
-# by action.yml wiring added later in the stack.
+# the three scenarios implemented by scripts/attach-package.sh so far:
+# Maven JAR, npm tarball, and NuGet package embedding. The attestation
+# and GHCR/release distribution scenarios in that feature are
+# implemented by action.yml wiring added later in the stack.
 
 setup() {
   SCRIPT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../scripts" && pwd)/attach-package.sh"
@@ -47,5 +47,22 @@ teardown() {
   extract_dir="$(mktemp -d)"
   tar -xzf dist/my-package-1.0.0.tgz -C "$extract_dir"
   [ -f "$extract_dir/package/sbom.json" ]
+  rm -rf "$extract_dir"
+}
+
+@test "Scenario: Opt-In Language Archive Embedding (NuGet Package)" {
+  # Given a packaged NuGet archive at "dist/my-package-1.0.0.nupkg"
+  mkdir -p dist
+  echo '<?xml version="1.0"?><package/>' >my.nuspec
+  (cd . && zip -q dist/my-package-1.0.0.nupkg my.nuspec)
+
+  # When the action runs with package-type=nuget, package-file-path=that nupkg
+  run "$SCRIPT" "nuget" "dist/my-package-1.0.0.nupkg" "sbom.json"
+  [ "$status" -eq 0 ]
+
+  # Then the file "sbom.json" should exist at the root of the nupkg
+  extract_dir="$(mktemp -d)"
+  unzip -q dist/my-package-1.0.0.nupkg -d "$extract_dir"
+  [ -f "$extract_dir/sbom.json" ]
   rm -rf "$extract_dir"
 }

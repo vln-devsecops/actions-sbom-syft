@@ -18,3 +18,11 @@ Feature: Attestation and Multi-Target Package Distribution
       | package-type      | npm                       |
       | package-file-path | dist/my-package-1.0.0.tgz |
     Then the file "package/sbom.json" should exist inside "dist/my-package-1.0.0.tgz"
+
+  Scenario: Opt-In Language Archive Embedding (NuGet Package)
+    Given a packaged NuGet archive at "dist/my-package-1.0.0.nupkg"
+    When the action runs with inputs:
+      | input             | value                         |
+      | package-type      | nuget                         |
+      | package-file-path | dist/my-package-1.0.0.nupkg   |
+    Then the file "sbom.json" should exist at the root of "dist/my-package-1.0.0.nupkg"
