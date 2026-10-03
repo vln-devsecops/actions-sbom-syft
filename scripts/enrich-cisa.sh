@@ -18,6 +18,15 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
+	--input | --output | --name | --version | --author | --supplier | --context)
+		if [ $# -lt 2 ]; then
+			echo "Error: '$1' requires a value." >&2
+			usage
+			exit 1
+		fi
+		;;
+	esac
+	case "$1" in
 	--input)
 		INPUT_FILE="$2"
 		shift 2

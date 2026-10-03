@@ -90,3 +90,9 @@ teardown() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"--name"* ]]
 }
+
+@test "enrich-cisa: fails with a clear error when a flag is given with no following value" {
+  run "$SCRIPT" --input "$INPUT_FILE" --output "$OUTPUT_FILE" --name "my-app" --version "1.0.0" --author
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requires a value"* ]]
+}
