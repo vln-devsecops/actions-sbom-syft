@@ -53,6 +53,10 @@ inputs:
     description: "Path to local archive artifact file (required if package-type is not 'none')"
     required: false
     default: ""
+  human-readable-report:
+    description: "Generate a human-readable HTML report of the SBOM via CycloneDX/Sunshine and upload it as a workflow artifact"
+    required: false
+    default: "true"
 
 outputs:
   sbom-path:
@@ -64,6 +68,9 @@ outputs:
   attestation-digest:
     description: "SHA-256 digest of the SBOM subject that was attested (empty if attest is 'false')"
     value: ${{ steps.attestation-digest.outputs.digest }}
+  report-path:
+    description: "Absolute path to the human-readable Sunshine HTML report (empty if human-readable-report is 'false')"
+    value: ${{ steps.sunshine-report.outputs.report-path }}
 
 runs:
   using: "composite"
@@ -134,6 +141,45 @@ runs:
           --supplier "$SUPPLIER" \
           --context "$GENERATION_CONTEXT"
         echo "sbom-path=$(pwd)/sbom.json" >> "$GITHUB_OUTPUT"
+
+    - name: Install Sunshine
+      if: inputs.human-readable-report == 'true'
+      shell: bash
+      env:
+        # CycloneDX/Sunshine has no tagged releases to pin to, unlike this
+        # repo's own `uses:` dependencies, so it's pinned to a specific
+        # commit SHA instead (the strongest pin available, not a floating
+        # "main"). Fetched into the action's own .bin dir, never into the
+        # caller's workspace.
+        SUNSHINE_COMMIT: beaab3faf2bab234069a8677fc627de2f0f01a3d
+      run: |
+        set -euo pipefail
+        bin_dir="${{ github.action_path }}/.bin"
+        mkdir -p "$bin_dir"
+        base_url="https://raw.githubusercontent.com/CycloneDX/sunshine/${SUNSHINE_COMMIT}"
+        curl -sSfL "${base_url}/sunshine.py" -o "$bin_dir/sunshine.py"
+        curl -sSfL "${base_url}/requirements.txt" -o "$bin_dir/sunshine-requirements.txt"
+        python3 -m pip install --quiet --user -r "$bin_dir/sunshine-requirements.txt"
+
+    - name: Generate Human-Readable SBOM Report
+      id: sunshine-report
+      if: inputs.human-readable-report == 'true'
+      shell: bash
+      env:
+        SBOM_PATH: ${{ steps.cisa-enrich.outputs.sbom-path }}
+      run: |
+        set -euo pipefail
+        python3 "${{ github.action_path }}/.bin/sunshine.py" \
+          -i "$SBOM_PATH" \
+          -o sbom-report.html
+        echo "report-path=$(pwd)/sbom-report.html" >> "$GITHUB_OUTPUT"
+
+    - name: Upload Human-Readable SBOM Report
+      if: inputs.human-readable-report == 'true'
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: sbom-report
+        path: ${{ steps.sunshine-report.outputs.report-path }}
 
     - name: Attest SBOM (GitHub Sigstore Attestation)
       if: inputs.attest == 'true'

@@ -28,6 +28,7 @@ for how changes to this repository are reviewed.
 | `release-tag`          | no       | `` (empty)                             | Target release tag. Required if `attach-release` is `true`.                   |
 | `package-type`         | no       | `none`                                 | Archive type to embed the SBOM into: `none`, `npm`, `maven`, `nuget`.         |
 | `package-file-path`    | no       | `` (empty)                             | Path to the local archive file. Required if `package-type` is not `none`.     |
+| `human-readable-report`| no       | `true`                                 | Generate a human-readable HTML report of the SBOM via [CycloneDX/Sunshine](https://github.com/CycloneDX/sunshine) and upload it as a workflow artifact named `sbom-report`. |
 
 ## Outputs
 
@@ -36,6 +37,7 @@ for how changes to this repository are reviewed.
 | `sbom-path`             | Absolute path to the enriched CISA `sbom.json`.                            |
 | `resolved-version`      | Final version string applied to the SBOM metadata.                        |
 | `attestation-digest`    | `sha256:`-prefixed digest of the attested SBOM file (empty if `attest` is `false`). |
+| `report-path`           | Absolute path to the human-readable Sunshine HTML report (empty if `human-readable-report` is `false`). |
 
 ## Permissions
 
@@ -180,7 +182,8 @@ held to.
 ```
 
 Run the full test suite locally (requires `bash`, `bats-core`, `jq`,
-`shellcheck`, `shfmt`, `tar`, `zip`/`unzip`, and `git`):
+`shellcheck`, `shfmt`, `tar`, `zip`/`unzip`, `git`, and `python3` with
+`PyYAML` for the BDD tests that parse `action.yml` directly):
 
 ```sh
 shellcheck scripts/*.sh
