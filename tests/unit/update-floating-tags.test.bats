@@ -75,6 +75,25 @@ commit_and_tag() {
   [[ "$output" == *"expected a full version tag"* ]]
 }
 
+@test "update-floating-tags: fails on a well-formed but incomplete version (missing patch component)" {
+  git commit -q --allow-empty -m "release v1.2"
+  git tag "v1.2"
+  run "$SCRIPT" "v1.2"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"expected a full version tag"* ]]
+}
+
+@test "update-floating-tags: correctly splits multi-digit version components" {
+  commit_and_tag "v10.20.30"
+  sha=$(git rev-parse v10.20.30)
+
+  run "$SCRIPT" "v10.20.30"
+  [ "$status" -eq 0 ]
+
+  [ "$(git rev-parse v10)" = "$sha" ]
+  [ "$(git rev-parse v10.20)" = "$sha" ]
+}
+
 @test "update-floating-tags: fails with a clear error when no argument is given" {
   run "$SCRIPT"
   [ "$status" -ne 0 ]
