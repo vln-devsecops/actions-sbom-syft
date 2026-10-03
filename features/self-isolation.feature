@@ -57,8 +57,8 @@ Feature: Self-Isolation When Used as a GitHub Action
   Scenario: Sunshine's own files are installed outside the consumer's workspace
     Given action.yml's "Install Sunshine" step
     When the step's run command is inspected
-    Then sunshine.py and its requirements file are written under a directory
-      derived from "github.action_path", never into the current working directory
+    Then sunshine.py is written under a directory derived from
+      "github.action_path", never into the current working directory
 
   Scenario: The human-readable report is generated from, and written to, the workspace
     Given action.yml's "Generate Human-Readable SBOM Report" step
