@@ -144,22 +144,27 @@ EOF
   step=$(get_step "Install Sunshine")
   [ -n "$step" ]
 
-  [[ "$step" == *"github.action_path"* ]]
-  [[ "$step" == *"bin_dir"* ]]
+  # install-sunshine.sh is invoked with the install directory derived from
+  # github.action_path/.bin (both occurrences legitimate: one to locate
+  # the script, one to tell it where to install), never the workspace
+  occurrences=$(grep -o "github.action_path" <<<"$step" | wc -l)
+  [ "$occurrences" -eq 2 ]
+  [[ "$step" == *"github.action_path }}/scripts/install-sunshine.sh"* ]]
   [[ "$step" == *"github.action_path }}/.bin"* ]]
-  # both the script and its requirements file land under bin_dir, not pwd
-  [[ "$step" == *'"$bin_dir/sunshine.py"'* ]]
-  [[ "$step" == *'"$bin_dir/sunshine-requirements.txt"'* ]]
 }
 
 @test "Scenario: The human-readable report is generated from, and written to, the workspace" {
   step=$(get_step "Generate Human-Readable SBOM Report")
   [ -n "$step" ]
 
-  # github.action_path appears exactly once, to locate sunshine.py itself
+  # generate-sunshine-report.sh and its bin dir are both located under
+  # github.action_path (two legitimate occurrences); its third argument
+  # (the output filename) and the report-path output are plain workspace
+  # paths, not github.action_path ones
   occurrences=$(grep -o "github.action_path" <<<"$step" | wc -l)
-  [ "$occurrences" -eq 1 ]
-  [[ "$step" == *"github.action_path }}/.bin/sunshine.py"* ]]
+  [ "$occurrences" -eq 2 ]
+  [[ "$step" == *"github.action_path }}/scripts/generate-sunshine-report.sh"* ]]
+  [[ "$step" == *"github.action_path }}/.bin"* ]]
 
   # report-path is derived from \$(pwd), not github.action_path
   [[ "$step" == *'report-path=$(pwd)/sbom-report.html'* ]]

@@ -153,13 +153,9 @@ runs:
         # caller's workspace.
         SUNSHINE_COMMIT: beaab3faf2bab234069a8677fc627de2f0f01a3d
       run: |
-        set -euo pipefail
-        bin_dir="${{ github.action_path }}/.bin"
-        mkdir -p "$bin_dir"
-        base_url="https://raw.githubusercontent.com/CycloneDX/sunshine/${SUNSHINE_COMMIT}"
-        curl -sSfL "${base_url}/sunshine.py" -o "$bin_dir/sunshine.py"
-        curl -sSfL "${base_url}/requirements.txt" -o "$bin_dir/sunshine-requirements.txt"
-        python3 -m pip install --quiet --user -r "$bin_dir/sunshine-requirements.txt"
+        "${{ github.action_path }}/scripts/install-sunshine.sh" \
+          "${{ github.action_path }}/.bin" \
+          "$SUNSHINE_COMMIT"
 
     - name: Generate Human-Readable SBOM Report
       id: sunshine-report
@@ -169,9 +165,10 @@ runs:
         SBOM_PATH: ${{ steps.cisa-enrich.outputs.sbom-path }}
       run: |
         set -euo pipefail
-        python3 "${{ github.action_path }}/.bin/sunshine.py" \
-          -i "$SBOM_PATH" \
-          -o sbom-report.html
+        "${{ github.action_path }}/scripts/generate-sunshine-report.sh" \
+          "${{ github.action_path }}/.bin" \
+          "$SBOM_PATH" \
+          sbom-report.html
         echo "report-path=$(pwd)/sbom-report.html" >> "$GITHUB_OUTPUT"
 
     - name: Upload Human-Readable SBOM Report

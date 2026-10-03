@@ -170,7 +170,9 @@ held to.
 │   ├── validate-target.sh
 │   ├── resolve-version.sh
 │   ├── enrich-cisa.sh
-│   └── attach-package.sh
+│   ├── attach-package.sh
+│   ├── install-sunshine.sh
+│   └── generate-sunshine-report.sh
 ├── features/                   # Gherkin acceptance criteria (BDD)
 ├── tests/
 │   ├── unit/                   # bats unit tests (TDD), one per script

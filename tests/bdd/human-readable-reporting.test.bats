@@ -42,17 +42,27 @@ EOF
     [ "$condition" = "inputs.human-readable-report == 'true'" ]
   done
 
-  # the upload step uses actions/upload-artifact and names the artifact sbom-report
-  upload_step=$(python3 - "$ACTION_YML" <<'EOF'
+  # the upload step uses actions/upload-artifact and names the artifact
+  # exactly "sbom-report" (parsed field compared exactly, not a substring
+  # match, so e.g. "sbom-report-extra" would not slip past this)
+  artifact_name=$(python3 - "$ACTION_YML" <<'EOF'
 import sys, yaml
 doc = yaml.safe_load(open(sys.argv[1]))
 for step in doc["runs"]["steps"]:
     if step.get("name") == "Upload Human-Readable SBOM Report":
-        print(yaml.dump(step))
+        print(step.get("with", {}).get("name", ""))
 EOF
 )
-  [[ "$upload_step" == *"actions/upload-artifact@"* ]]
-  [[ "$upload_step" == *"name: sbom-report"* ]]
+  uses_value=$(python3 - "$ACTION_YML" <<'EOF'
+import sys, yaml
+doc = yaml.safe_load(open(sys.argv[1]))
+for step in doc["runs"]["steps"]:
+    if step.get("name") == "Upload Human-Readable SBOM Report":
+        print(step.get("uses", ""))
+EOF
+)
+  [ "$artifact_name" = "sbom-report" ]
+  [[ "$uses_value" == actions/upload-artifact@* ]]
 }
 
 @test "Scenario: Report Generation Can Be Disabled" {
