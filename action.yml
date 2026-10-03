@@ -137,7 +137,7 @@ runs:
 
     - name: Attest SBOM (GitHub Sigstore Attestation)
       if: inputs.attest == 'true'
-      uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+      uses: actions/attest-sbom@v4.1.0
       with:
         subject-path: ${{ steps.cisa-enrich.outputs.sbom-path }}
         sbom-path: ${{ steps.cisa-enrich.outputs.sbom-path }}
