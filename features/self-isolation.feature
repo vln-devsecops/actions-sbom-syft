@@ -38,3 +38,18 @@ Feature: Self-Isolation When Used as a GitHub Action
     Then it invokes resolve-version.sh with no "-C" or working-directory
       override pointing at "github.action_path", so `git describe` (its
       fallback) sees the caller's own tags, never this action's release tags
+
+  Scenario: The enriched SBOM path is computed from the workspace
+    Given action.yml's "Enrich Metadata for CISA Compliance" step
+    When the step's run command is inspected
+    Then the "sbom-path" output is derived from "$(pwd)", not "github.action_path"
+    And the step sets no working-directory override that would change what
+      "pwd" means for it
+
+  Scenario: GHCR attachment and package embedding never leak the action's own path
+    Given action.yml's "Attach to OCI Image in GHCR" and
+      "Embed SBOM in Package Payload" steps
+    When each step's run command is inspected
+    Then the GHCR step never references "github.action_path"
+    And the package-embed step references "github.action_path" exactly once,
+      only to locate its own attach-package.sh script, never as a data path

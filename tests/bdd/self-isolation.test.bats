@@ -55,7 +55,10 @@ EOF
   [ -n "$step" ]
 
   [[ "$step" == *"github.action_path"* ]]
-  [[ "$step" == *'bin_dir="${{ github.action_path }}/.bin"'* ]]
+  # bin_dir is derived from github.action_path/.bin, regardless of quoting
+  # style — match on the inner fragment, not the whole literal assignment
+  [[ "$step" == *"bin_dir"* ]]
+  [[ "$step" == *"github.action_path }}/.bin"* ]]
   [[ "$step" == *"GITHUB_PATH"* ]]
 }
 
@@ -86,4 +89,40 @@ for step in doc["runs"]["steps"]:
 EOF
 )
   [ -z "$wd" ]
+}
+
+@test "Scenario: Enriched SBOM path is computed from the workspace, not the action's own path" {
+  step=$(get_step "Enrich Metadata for CISA Compliance")
+  [ -n "$step" ]
+
+  # sbom-path is derived from \$(pwd) (the step's cwd, i.e. the workspace)
+  [[ "$step" == *'sbom-path=$(pwd)/sbom.json'* ]]
+
+  # the step itself sets no working-directory override that would change
+  # what "pwd" means here
+  wd=$(python3 - "$ACTION_YML" <<'EOF'
+import sys, yaml
+doc = yaml.safe_load(open(sys.argv[1]))
+for step in doc["runs"]["steps"]:
+    if step.get("name") == "Enrich Metadata for CISA Compliance":
+        print(step.get("working-directory", ""))
+EOF
+)
+  [ -z "$wd" ]
+}
+
+@test "Scenario: GHCR attach and package-embed steps never reference the action's own path as data" {
+  ghcr_step=$(get_step "Attach to OCI Image in GHCR")
+  [ -n "$ghcr_step" ]
+  # cosign attaches the enriched SBOM to the caller's target image; this
+  # step has no reason to ever mention the action's own checkout
+  [[ "$ghcr_step" != *"github.action_path"* ]]
+
+  embed_step=$(get_step "Embed SBOM in Package Payload")
+  [ -n "$embed_step" ]
+  # the only legitimate github.action_path reference here is locating the
+  # action's own attach-package.sh script, never a data path
+  [[ "$embed_step" == *"github.action_path }}/scripts/attach-package.sh"* ]]
+  occurrences=$(grep -o "github.action_path" <<<"$embed_step" | wc -l)
+  [ "$occurrences" -eq 1 ]
 }
