@@ -68,11 +68,11 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
 
       - name: Run Release-Please
         id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        uses: googleapis/release-please-action@v5.0.0
         with:
           release-type: node
 
@@ -99,10 +99,10 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
 
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -114,7 +114,7 @@ jobs:
           docker push ghcr.io/${{ github.repository }}:v1.2.0
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Generate SBOM and attach to GHCR
         uses: vln-devsecops/actions-sbom-syft@v1
@@ -137,7 +137,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
 
       - name: Build Java package
         run: ./gradlew build
