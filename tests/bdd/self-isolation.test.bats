@@ -39,6 +39,19 @@ for step in doc["runs"]["steps"]:
 EOF
 }
 
+get_step_full() {
+  python3 - "$ACTION_YML" "$1" <<'EOF'
+import sys, yaml
+path, name = sys.argv[1], sys.argv[2]
+doc = yaml.safe_load(open(path))
+for step in doc["runs"]["steps"]:
+    if step.get("name") == name:
+        print(yaml.dump(step))
+        sys.exit(0)
+sys.exit(1)
+EOF
+}
+
 @test "Scenario: Syft scans only the caller's workspace, never the action's own path" {
   step=$(get_step "Generate Base CycloneDX SBOM")
   [ -n "$step" ]
@@ -125,4 +138,40 @@ EOF
   [[ "$embed_step" == *"github.action_path }}/scripts/attach-package.sh"* ]]
   occurrences=$(grep -o "github.action_path" <<<"$embed_step" | wc -l)
   [ "$occurrences" -eq 1 ]
+}
+
+@test "Scenario: Sunshine's own files are installed outside the consumer's workspace" {
+  step=$(get_step "Install Sunshine")
+  [ -n "$step" ]
+
+  # install-sunshine.sh is invoked with the install directory derived from
+  # github.action_path/.bin (both occurrences legitimate: one to locate
+  # the script, one to tell it where to install), never the workspace
+  occurrences=$(grep -o "github.action_path" <<<"$step" | wc -l)
+  [ "$occurrences" -eq 2 ]
+  [[ "$step" == *"github.action_path }}/scripts/install-sunshine.sh"* ]]
+  [[ "$step" == *"github.action_path }}/.bin"* ]]
+}
+
+@test "Scenario: The human-readable report is generated from, and written to, the workspace" {
+  step=$(get_step "Generate Human-Readable SBOM Report")
+  [ -n "$step" ]
+
+  # generate-sunshine-report.sh and its bin dir are both located under
+  # github.action_path (two legitimate occurrences); its third argument
+  # (the output filename) and the report-path output are plain workspace
+  # paths, not github.action_path ones
+  occurrences=$(grep -o "github.action_path" <<<"$step" | wc -l)
+  [ "$occurrences" -eq 2 ]
+  [[ "$step" == *"github.action_path }}/scripts/generate-sunshine-report.sh"* ]]
+  [[ "$step" == *"github.action_path }}/.bin"* ]]
+
+  # report-path is derived from \$(pwd), not github.action_path
+  [[ "$step" == *'report-path=$(pwd)/sbom-report.html'* ]]
+}
+
+@test "Scenario: Uploading the human-readable report never references the action's own path" {
+  step=$(get_step_full "Upload Human-Readable SBOM Report")
+  [ -n "$step" ]
+  [[ "$step" != *"github.action_path"* ]]
 }

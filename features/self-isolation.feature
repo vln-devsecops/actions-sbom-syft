@@ -53,3 +53,20 @@ Feature: Self-Isolation When Used as a GitHub Action
     Then the GHCR step never references "github.action_path"
     And the package-embed step references "github.action_path" exactly once,
       only to locate its own attach-package.sh script, never as a data path
+
+  Scenario: Sunshine's own files are installed outside the consumer's workspace
+    Given action.yml's "Install Sunshine" step
+    When the step's run command is inspected
+    Then sunshine.py is written under a directory derived from
+      "github.action_path", never into the current working directory
+
+  Scenario: The human-readable report is generated from, and written to, the workspace
+    Given action.yml's "Generate Human-Readable SBOM Report" step
+    When the step's run command is inspected
+    Then "github.action_path" is referenced only to locate sunshine.py itself
+    And the "report-path" output is derived from "$(pwd)", not "github.action_path"
+
+  Scenario: Uploading the human-readable report never references the action's own path
+    Given action.yml's "Upload Human-Readable SBOM Report" step
+    When the step is inspected
+    Then it never references "github.action_path"
