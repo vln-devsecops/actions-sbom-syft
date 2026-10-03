@@ -20,13 +20,18 @@ PR has no SCA surface), say so explicitly rather than omitting it.
    - `action.yml` and workflow YAML must not interpolate untrusted input
      (PR titles/bodies, issue text, branch names, etc.) directly into
      `run:` blocks — use `env:` indirection to avoid script injection.
+   - No workflow in this repo should use `pull_request_target` with a
+     checkout of the PR head; flag it if one ever is added — that
+     combination runs untrusted code with privileged secrets.
    - No secrets, tokens, or credentials hard-coded or logged.
 
 2. **SCA (software composition / supply chain)**
    - All third-party GitHub Actions (`uses:`) must be pinned to a full
      commit SHA (not a mutable tag like `@v3`), with a trailing comment
-     noting the human-readable version, per GitHub's supply-chain hardening
-     guidance.
+     noting the human-readable version. Don't just check the comment is
+     present — verify the SHA actually resolves to the claimed tag/release
+     (e.g. via the GitHub UI or `git ls-remote --tags`); a mismatched
+     comment is itself a known supply-chain attack vector.
    - Any pinned tool version (Syft, cosign, bats-core, etc.) must be a real,
      resolvable release; flag anything pinned to `latest`/`main`/a floating
      major tag.
@@ -34,12 +39,21 @@ PR has no SCA surface), say so explicitly rather than omitting it.
      be justified — flag unnecessary or unmaintained dependencies.
 
 3. **Test coverage — BDD**
-   - Every Gherkin scenario touched or added by the PR in `features/*.feature`
-     must have a corresponding executable acceptance test under
-     `tests/bdd/` (or `tests/e2e/`) that exercises the same Given/When/Then.
+   - This area applies whenever a PR adds or changes anything under
+     `features/` or any script/workflow behavior a `features/*.feature`
+     scenario describes — not only when the `.feature` file itself is
+     touched. Treat "we added behavior but didn't update/add a scenario"
+     as a finding, not an N/A.
+   - Every Gherkin scenario in `features/*.feature` must have a
+     corresponding executable acceptance test under `tests/bdd/` (or
+     `tests/e2e/`) that exercises the same Given/When/Then.
    - Flag scenarios that exist only as prose with no executable counterpart.
 
 4. **Test coverage — TDD**
+   - This area applies whenever a PR adds or changes a function in
+     `scripts/*.sh` — not only when `tests/unit/*.bats` itself is touched.
+     A new script or function with no corresponding unit test is always a
+     finding, never N/A.
    - Every new/changed function in `scripts/*.sh` must have unit tests in
      `tests/unit/*.bats` covering at least: the happy path, one documented
      edge case, and one failure/error path.
@@ -66,4 +80,6 @@ Each review must end with one of:
 
 Because each PR stacks on the last, a finding in an earlier PR must be
 fixed in that PR (not papered over downstream). Rebase/update dependent
-branches after a fix lands.
+branches after a fix lands. A PR should not be opened for review until the
+PR it stacks on has itself reached APPROVE — reviewing out of order means
+reviewing a diff whose base may still change.
