@@ -1,0 +1,69 @@
+name: Unit & Static Analysis
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Run shellcheck on all scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(scripts/*.sh tests/unit/*.bats)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shell scripts yet."
+            exit 0
+          fi
+          shellcheck scripts/*.sh
+
+      - name: Check shell formatting (shfmt)
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(scripts/*.sh)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shell scripts yet."
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shfmt
+          shfmt -d scripts/*.sh
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install bats
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bats shellcheck
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(tests/unit/*.bats)
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "No unit tests yet."
+            exit 0
+          fi
+          bats tests/unit/*.bats

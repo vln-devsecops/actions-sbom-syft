@@ -1,0 +1,36 @@
+name: BDD Acceptance
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  bdd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bats jq zip
+
+      - name: Run BDD acceptance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(tests/bdd/*.bats)
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "No BDD acceptance tests yet."
+            exit 0
+          fi
+          bats tests/bdd/*.bats
